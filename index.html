@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verkaufsmesse – Designer-Ledercouch</title>
+  <style>
+    :root {
+      --bg: #f7f7f8; --fg: #222; --muted: #6b7280; --card: #fff;
+      --accent: #e5e7eb; --btn: #1f2937; --btn-fg: #fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:0; background:var(--bg); color:var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .wrap { max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    .card { background:var(--card); border:1px solid var(--accent); border-radius:16px; padding:24px;
+      box-shadow:0 2px 12px rgba(0,0,0,.04); }
+    h1{ font-size:1.6rem; margin:0 0 12px; } h2{ font-size:1.2rem; margin:24px 0 12px; color:var(--muted); }
+    .muted{ color:var(--muted); } .spacer{ height:8px; }
+    .grid{ display:grid; gap:12px; } .row{ display:flex; gap:12px; align-items:center; }
+    input[type=number]{ width:100%; padding:12px; border:1px solid var(--accent); border-radius:10px; font-size:1rem; background:#fbfbfb; }
+    table{ width:100%; border-collapse:collapse; } th,td{ padding:8px 6px; border-bottom:1px solid var(--accent); text-align:left; }
+    .pill{ display:inline-block; padding:6px 10px; border-radius:999px; background:#eef0f3; font-weight:600; }
+    button{ appearance:none; border:none; background:var(--btn); color:var(--btn-fg); padding:12px 16px; border-radius:12px; cursor:pointer; font-weight:600; }
+    button.ghost{ background:transparent; color:var(--fg); border:1px solid var(--accent); }
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .consent{display:flex;gap:10px;align-items:flex-start;background:#f4f6f8;border:1px solid var(--accent);border-radius:12px;padding:14px}
+    input[type=checkbox]{width:18px;height:18px;margin-top:2px}
+    .center{ text-align:center; }
+    .pulse{ animation:pulse 1.3s ease-in-out infinite; opacity:.8; }
+    @keyframes pulse{ 0%{opacity:.5} 50%{opacity:1} 100%{opacity:.5} }
+    a{ color:inherit; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="app">Lade …</div>
+  </div>
+
+  <!-- Probandencode & Spieler-ID bereitstellen -->
+  <script>
+    (function(){
+      const p = new URLSearchParams(location.search);
+      window.probandCode = p.get('code') || p.get('c') || 'UNKNOWN';
+      let pid = localStorage.getItem('playerId');
+      if (!pid) { pid = (crypto.randomUUID?.() || ('p_'+Date.now()+Math.random().toString(36).slice(2)));
+        localStorage.setItem('playerId', pid); }
+      window.playerId = pid;
+    })();
+    // Optionales Logging-Ziel (z. B. Google Apps Script). Wenn nicht gesetzt, wird in der Konsole geloggt.
+    window.logEvent = window.logEvent || ((name, data)=>console.log('[logEvent]', name, data));
+  </script>
+
+   <!-- Google-Sheets-Eintrag -->
+  <script>
+  const APP_URL = 'https://script.google.com/macros/s/AKfycbzuQE1oN-IoFstOXeYL8PEgyt3-Vujx9h_dUow4sOqfF3H2I_DDn6K_oSbLQcq4Pojx/exec';
+
+  window.sendRow = function(row){
+    const body = new URLSearchParams();
+
+    // IDs mitschicken (aus row, Fallback auf window.*)
+    body.append('player_id',      row.player_id      ?? window.playerId     ?? '');
+    body.append('proband_code',   row.proband_code   ?? window.probandCode  ?? '');
+    body.append('participant_id', row.participant_id ?? '');
+
+    // Runden- / Angebotsdaten
+    if (row.runde != null)           body.append('runde',           String(row.runde));
+    if (row.algo_offer != null)      body.append('algo_offer',      String(row.algo_offer));
+    if (row.proband_counter != null) body.append('proband_counter', String(row.proband_counter));
+
+    body.append('accepted', row.accepted ? '1' : '0');
+    body.append('finished', row.finished ? '1' : '0');
+
+    if (row.deal_price != null && row.deal_price !== '') {
+      body.append('deal_price', String(row.deal_price));
+    }
+
+    // zum Debuggen – kannst du später wieder rausnehmen
+    console.log('Sende an Apps Script:', Object.fromEntries(body.entries()));
+
+    fetch(APP_URL, { method:'POST', body, mode:'no-cors' }).catch(()=>{});
+  };
+  </script>
+
+
+  <!-- Verhandlungslogik -->
+  <script type="module" src="./app_Neu_Verhandlung5.js"></script>
+</body>
+</html>
+
+
+
