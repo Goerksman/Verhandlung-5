@@ -28,7 +28,8 @@ if (!window.playerId) {
     Q.get('pid') ||
     Q.get('id');
 
-  window.playerId = fromUrl || ('P_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+  window.playerId =
+    fromUrl || ('P_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
 }
 
 if (!window.probandCode) {
@@ -150,7 +151,7 @@ function shouldAutoAccept(initialOffer, minPrice, prevOffer, counter){
 }
 
 /* ========================================================================== */
-/* NEUE ABBRUCHWAHRSCHEINLICHKEIT (Differenzmodell, Version B)              */
+/* NEUE ABBRUCHWAHRSCHEINLICHKEIT (Differenzmodell, Version B)               */
 /* ========================================================================== */
 
 function abortProbability(userOffer) {
@@ -171,6 +172,7 @@ function abortProbability(userOffer) {
   else if (diff >= 100 * f) chance = 8;
   else chance = 2;
 
+  // leichter Anstieg mit der Rundenzahl
   chance += state.runde * 1.5;
 
   return Math.min(100, Math.round(chance));
@@ -210,7 +212,7 @@ function maybeAbort(userOffer) {
 }
 
 /* ========================================================================== */
-/* Mustererkennung (nicht verändert)                                          */
+/* Mustererkennung                                                            */
 /* ========================================================================== */
 function getThresholdForAmount(prev){
   const f = state.scale_factor || 1.0;
@@ -265,14 +267,14 @@ function updatePatternMessage(){
 }
 
 /* ========================================================================== */
-/* Angebotslogik – unverändert                                                 */
+/* Angebotslogik – unverändert                                               */
 /* ========================================================================== */
 function computeNextOffer(prevOffer, minPrice){
   return Math.max(minPrice, prevOffer);
 }
 
 /* ========================================================================== */
-/* Rendering                                                                   */
+/* Rendering                                                                  */
 /* ========================================================================== */
 
 function viewVignette(){
@@ -284,7 +286,7 @@ function viewVignette(){
       Vergleichbare Sofas liegen zwischen <b>2.500 €</b> und <b>10.000 €</b>.
     </p>
     <p>
-      Du verhandelst über den Verkaufspreis, aber der Verkäufer besitzt eine klare Preisuntergrenze.
+      Deine bisherigen Erhöhungen sind ziemlich frech – mach bitte einen größeren Schritt nach oben.
     </p>
     <p class="muted">
       <b>Hinweis:</b> Die Verhandlung dauert zufällig ${CONFIG.ROUNDS_MIN}–${CONFIG.ROUNDS_MAX} Runden.
@@ -365,17 +367,25 @@ function viewAbort(chance){
 }
 
 /* ========================================================================== */
-/* Hauptscreen der Verhandlung                                                 */
+/* Hauptscreen der Verhandlung (mit richtiger Risikoanzeige)                 */
 /* ========================================================================== */
 
 function viewNegotiate(errorMsg){
-  const abortChance = typeof state.last_abort_chance === 'number' ? state.last_abort_chance : null;
+  let displayBuyer;
+  const last = state.history[state.history.length - 1];
+
+  if (last && last.proband_counter != null && last.proband_counter !== '') {
+    displayBuyer = Number(last.proband_counter);
+  } else {
+    displayBuyer = state.current_offer;
+  }
+
+  let abortChance = abortProbability(displayBuyer);
+  state.last_abort_chance = abortChance;
 
   let color = '#16a34a';
-  if (abortChance !== null){
-    if (abortChance > 50) color = '#ea580c';
-    else if (abortChance > 25) color = '#eab308';
-  }
+  if (abortChance > 50) color = '#ea580c';
+  else if (abortChance > 25) color = '#eab308';
 
   app.innerHTML = `
     <h1>Verkaufsverhandlung</h1>
@@ -394,9 +404,9 @@ function viewNegotiate(errorMsg){
         padding:10px;
         border-radius:8px;
         margin-bottom:10px;">
-        <b style="color:${color};">Abbruchwahrscheinlichkeit:</b>
+        <b style="color:${color};">Abbruchwahrscheinlichkeit (auf Basis deines letzten Angebots):</b>
         <span style="color:${color}; font-weight:600;">
-          ${abortChance !== null ? abortChance + '%' : '--'}
+          ${abortChance}%
         </span>
       </div>
 
