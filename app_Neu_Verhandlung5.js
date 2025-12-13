@@ -356,6 +356,20 @@ function viewAbort(chance){
     </div>
 
     <button id="restartBtn">Neue Verhandlung</button>
+    <button id="surveyBtn"
+      style="
+        margin-top:8px;
+        display:inline-block;
+        padding:8px 14px;
+        border-radius:9999px;
+        border:1px solid #d1d5db;
+        background:#e5e7eb;
+        color:#374151;
+        font-size:0.95rem;
+        cursor:pointer;
+      ">
+      Zur Umfrage
+    </button>
 
     ${historyTable()}
   `;
@@ -364,6 +378,14 @@ function viewAbort(chance){
     state = newState();
     viewVignette();
   };
+
+  const surveyBtn = document.getElementById('surveyBtn');
+  if (surveyBtn) {
+    surveyBtn.onclick = () => {
+      window.location.href =
+        'https://docs.google.com/forms/d/e/1FAIpQLSdwa6nkhEkT6tMBedmWgaGSgvUWamDJpqRQLGdp7vkjS0Hb7g/viewform?usp=publish-editor';
+    };
+  }
 }
 
 /* ========================================================================== */
@@ -645,6 +667,20 @@ function viewFinish(accepted){
     </div>
 
     <button id="restartBtn">Neue Verhandlung</button>
+    <button id="surveyBtn"
+      style="
+        margin-top:8px;
+        display:inline-block;
+        padding:8px 14px;
+        border-radius:9999px;
+        border:1px solid #d1d5db;
+        background:#e5e7eb;
+        color:#374151;
+        font-size:0.95rem;
+        cursor:pointer;
+      ">
+      Zur Umfrage
+    </button>
 
     ${historyTable()}
   `;
@@ -653,6 +689,14 @@ function viewFinish(accepted){
     state = newState();
     viewVignette();
   };
+
+  const surveyBtn = document.getElementById('surveyBtn');
+  if (surveyBtn) {
+    surveyBtn.onclick = () => {
+      window.location.href =
+        'https://docs.google.com/forms/d/e/1FAIpQLSdwa6nkhEkT6tMBedmWgaGSgvUWamDJpqRQLGdp7vkjS0Hb7g/viewform?usp=publish-editor';
+    };
+  }
 }
 
 /* ========================================================================== */
