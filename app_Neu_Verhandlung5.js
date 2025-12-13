@@ -19,7 +19,7 @@ CONFIG.MIN_PRICE = Number.isFinite(CONFIG.MIN_PRICE)
   : Math.round(CONFIG.INITIAL_OFFER * CONFIG.MIN_PRICE_FACTOR);
 
 /* ========================================================================== */
-/* Spieler-ID / Probandencode initialisieren                                  */
+/* Spieler-ID / Probandencode initialisieren                                 */
 /* ========================================================================== */
 if (!window.playerId) {
   const fromUrl =
@@ -98,6 +98,7 @@ function newState(){
 
     history: [],
     patternMessage: '',
+    warningRounds: 0,   // wie viele Runden nacheinander der Warnhinweis aktiv war
     finished: false,
     accepted: false,
     deal_price: null,
@@ -131,7 +132,7 @@ function logRound(row) {
 }
 
 /* ========================================================================== */
-/* Auto-Accept                                                                */
+/* Auto-Accept (Verhandlungsstil unverändert)                                */
 /* ========================================================================== */
 function shouldAutoAccept(initialOffer, minPrice, prevOffer, counter){
   const c = Number(counter);
@@ -151,35 +152,148 @@ function shouldAutoAccept(initialOffer, minPrice, prevOffer, counter){
 }
 
 /* ========================================================================== */
-/* NEUE ABBRUCHWAHRSCHEINLICHKEIT (Differenzmodell, Version B)               */
+/* Abbruchwahrscheinlichkeit: Diff 3000 → 30 %                               */
 /* ========================================================================== */
-
 function abortProbability(userOffer) {
   const seller = state.current_offer;
   const buyer  = Number(userOffer);
   const f = state.scale_factor || 1.0;
 
-  const diff = Math.abs(seller - buyer);
-
+  // Extrem-Lowball-Basisrisiko (wird aber in Runde 1 nicht zum Abbruch genutzt)
   if (buyer < 1500 * f) return 100;
 
-  let chance = 0;
+  const diff = Math.abs(seller - buyer);
 
-  if (diff >= 1000 * f) chance = 60;
-  else if (diff >= 750 * f) chance = 45;
-  else if (diff >= 500 * f) chance = 30;
-  else if (diff >= 250 * f) chance = 15;
-  else if (diff >= 100 * f) chance = 8;
-  else chance = 2;
+  const BASE_DIFF = 3000 * f;   // bei dieser Differenz sollen 30 % entstehen
+  let chance = (diff / BASE_DIFF) * 30;
 
-  // leichter Anstieg mit der Rundenzahl
-  chance += state.runde * 1.5;
+  if (chance < 0)   chance = 0;
+  if (chance > 100) chance = 100;
 
-  return Math.min(100, Math.round(chance));
+  return Math.round(chance);
 }
 
+/* ========================================================================== */
+/* Mustererkennung + Warnhinweis-Steuerung                                   */
+/* ========================================================================== */
+
+function getThresholdForAmount(prev){
+  const f = state.scale_factor || 1.0;
+  const A = 2250 * f;
+  const B = 3000 * f;
+  const C = 4000 * f;
+  const D = 5000 * f;
+
+  if (prev >= A && prev < B) return 0.05;
+  if (prev >= B && prev < C) return 0.04;
+  if (prev >= C && prev < D) return 0.03;
+  return null;
+}
+
+/**
+ * Aktualisiert patternMessage + warningRounds.
+ * currentBuyerOffer wird mit in die Kette einbezogen, ohne dass
+ * dafür schon ein History-Eintrag nötig ist.
+ */
+function updatePatternMessage(currentBuyerOffer){
+  const f = state.scale_factor || 1.0;
+  const limit = 2250 * f;
+
+  const counters = [];
+
+  for (let h of state.history) {
+    let c = h.proband_counter;
+    if (c == null || c === '') continue;
+    c = Number(c);
+    if (!Number.isFinite(c)) continue;
+    if (c < limit) continue;
+    counters.push(c);
+  }
+
+  if (currentBuyerOffer != null) {
+    const cNow = Number(currentBuyerOffer);
+    if (Number.isFinite(cNow) && cNow >= limit) {
+      counters.push(cNow);
+    }
+  }
+
+  if (counters.length < 3){
+    state.patternMessage = '';
+    state.warningRounds = 0;
+    return;
+  }
+
+  let chain = 1;
+  for (let i = 1; i < counters.length; i++){
+    const prev = counters[i-1];
+    const curr = counters[i];
+    const diff = curr - prev;
+
+    if (diff < 0){
+      chain = 1;
+      continue;
+    }
+    const th = getThresholdForAmount(prev);
+    if (!th){
+      chain = 1;
+      continue;
+    }
+
+    if (diff <= prev * th) chain++;
+    else chain = 1;
+  }
+
+  const wasActive = !!state.patternMessage;
+
+  if (chain >= 3){
+    state.patternMessage =
+      'Mit solchen kleinen Erhöhungen wird das schwierig. Geh bitte ein Stück näher an deine Schmerzgrenze, dann finden wir bestimmt schneller einen fairen Deal.';
+    // Wenn schon aktiv: weiterzählen, sonst auf 1 setzen
+    if (wasActive) {
+      state.warningRounds = (state.warningRounds || 0) + 1;
+    } else {
+      state.warningRounds = 1;
+    }
+  } else {
+    state.patternMessage = '';
+    state.warningRounds = 0;
+  }
+}
+
+/* ========================================================================== */
+/* Angebotslogik – unverändert (kein Nachgeben)                              */
+/* ========================================================================== */
+function computeNextOffer(prevOffer, minPrice){
+  return Math.max(minPrice, prevOffer);
+}
+
+/* ========================================================================== */
+/* Abbruchentscheidung mit Rundenausnahme + Patternbonus                     */
+/* ========================================================================== */
 function maybeAbort(userOffer) {
-  const chance = abortProbability(userOffer);
+  const buyer = Number(userOffer);
+  const f = state.scale_factor || 1.0;
+
+  // Runde 1: KEIN Abbruch, egal wie hoch die Chance – nur anzeigen.
+  if (state.runde === 1) {
+    const baseChance = abortProbability(userOffer);
+    state.last_abort_chance = baseChance;
+    return false;
+  }
+
+  // Ab Runde 2: Basisrisiko über Differenz
+  let chance = abortProbability(userOffer);
+
+  // Extrem-Lowball ab Runde 2: forcierter 100 %-Abbruch
+  if (buyer < EXTREME_BASE * f) {
+    chance = 100;
+  }
+
+  // Wenn der Warnhinweis aktiv ist: +3 %-Punkte pro Warnrunde
+  if (state.warningRounds && state.warningRounds > 0) {
+    chance = Math.min(100, chance + state.warningRounds * 3);
+  }
+
   state.last_abort_chance = chance;
 
   const roll = randInt(1, 100);
@@ -209,68 +323,6 @@ function maybeAbort(userOffer) {
     return true;
   }
   return false;
-}
-
-/* ========================================================================== */
-/* Mustererkennung                                                            */
-/* ========================================================================== */
-function getThresholdForAmount(prev){
-  const f = state.scale_factor || 1.0;
-  const A = 2250 * f;
-  const B = 3000 * f;
-  const C = 4000 * f;
-  const D = 5000 * f;
-
-  if (prev >= A && prev < B) return 0.05;
-  if (prev >= B && prev < C) return 0.04;
-  if (prev >= C && prev < D) return 0.03;
-  return null;
-}
-
-function updatePatternMessage(){
-  const f = state.scale_factor || 1.0;
-  const limit = 2250 * f;
-
-  const counters = [];
-  for (let h of state.history) {
-    let c = h.proband_counter;
-    if (c == null || c === '') continue;
-    c = Number(c);
-    if (!Number.isFinite(c)) continue;
-    if (c < limit) continue;
-    counters.push(c);
-  }
-
-  if (counters.length < 3){
-    state.patternMessage = '';
-    return;
-  }
-
-  let chain = 1;
-  for (let i = 1; i < counters.length; i++){
-    const prev = counters[i-1];
-    const curr = counters[i];
-    const diff = curr - prev;
-
-    if (diff < 0){ chain = 1; continue; }
-    const th = getThresholdForAmount(prev);
-    if (!th){ chain = 1; continue; }
-
-    if (diff <= prev * th) chain++;
-    else chain = 1;
-  }
-
-  state.patternMessage =
-    chain >= 3
-      ? 'Mit solchen kleinen Erhöhungen wird das schwierig. Geh bitte ein Stück näher an deine Schmerzgrenze, dann finden wir bestimmt schneller einen fairen Deal.'
-      : '';
-}
-
-/* ========================================================================== */
-/* Angebotslogik – unverändert                                               */
-/* ========================================================================== */
-function computeNextOffer(prevOffer, minPrice){
-  return Math.max(minPrice, prevOffer);
 }
 
 /* ========================================================================== */
@@ -389,7 +441,7 @@ function viewAbort(chance){
 }
 
 /* ========================================================================== */
-/* Hauptscreen der Verhandlung (mit richtiger Risikoanzeige)                 */
+/* Hauptscreen der Verhandlung (Risikoanzeige inkl. Pattern-Effekt)          */
 /* ========================================================================== */
 
 function viewNegotiate(errorMsg){
@@ -402,7 +454,14 @@ function viewNegotiate(errorMsg){
     displayBuyer = state.current_offer;
   }
 
+  // Basis-Risiko für Anzeige
   let abortChance = abortProbability(displayBuyer);
+
+  // Falls Warnhinweis schon aktiv: Anzeige inkl. +3 %-Punkte pro Warnrunde
+  if (state.runde >= 2 && state.warningRounds && state.warningRounds > 0) {
+    abortChance = Math.min(100, abortChance + state.warningRounds * 3);
+  }
+
   state.last_abort_chance = abortChance;
 
   let color = '#16a34a';
@@ -432,6 +491,8 @@ function viewNegotiate(errorMsg){
         </span>
       </div>
 
+      ${state.patternMessage ? `<p class="info">${state.patternMessage}</p>` : ''}
+
       <label for="counter">Dein Gegenangebot (€)</label>
       <div class="row">
         <input id="counter" type="number" step="0.01" min="0" />
@@ -442,7 +503,6 @@ function viewNegotiate(errorMsg){
     </div>
 
     ${historyTable()}
-    ${state.patternMessage ? `<p class="info">${state.patternMessage}</p>` : ''}
     ${errorMsg ? `<p class="error">${errorMsg}</p>` : ''}
   `;
 
@@ -479,7 +539,7 @@ function viewNegotiate(errorMsg){
 /* Handle Submit                                                              */
 /* ========================================================================== */
 function handleSubmit(raw){
-  const val = raw.trim().replace(',','.');
+  const val = String(raw ?? '').trim().replace(',','.');
   const num = Number(val);
 
   if (!Number.isFinite(num) || num < 0){
@@ -490,6 +550,18 @@ function handleSubmit(raw){
   const f = state.scale_factor || 1.0;
   const extremeThreshold = EXTREME_BASE * f;
 
+  // keine niedrigeren Angebote als in der Vorrunde erlauben
+  const last = state.history[state.history.length - 1];
+  if (last && last.proband_counter != null && last.proband_counter !== '') {
+    const lastBuyer = Number(last.proband_counter);
+    if (Number.isFinite(lastBuyer) && num < lastBuyer) {
+      return viewNegotiate(
+        `Dein Gegenangebot darf nicht niedriger sein als in der Vorrunde (${eur(lastBuyer)}).`
+      );
+    }
+  }
+
+  // Auto-Accept (Verhandlungsstil)
   if (shouldAutoAccept(state.initial_offer, state.min_price, prevOffer, num)){
     state.history.push({
       runde: state.runde,
@@ -514,7 +586,8 @@ function handleSubmit(raw){
     return viewThink(() => viewFinish(true));
   }
 
-  if (num < extremeThreshold){
+  // Extrem-Lowball nur ab Runde 2 als harter Abbruch
+  if (state.runde >= 2 && num < extremeThreshold){
     state.last_abort_chance = 100;
 
     state.history.push({
@@ -540,8 +613,13 @@ function handleSubmit(raw){
     return viewAbort(100);
   }
 
+  // Pattern-/Warnzustand mit dem aktuellen Angebot aktualisieren
+  updatePatternMessage(num);
+
+  // Abbruchentscheidung (inkl. +3 %-Punkte pro Warnrunde, außer Runde 1)
   if (maybeAbort(num)) return;
 
+  // Normale Runde: Verhandlungsstil – kein Preisnachlass
   const next = computeNextOffer(prevOffer, state.min_price);
   const concession = prevOffer - next;
 
@@ -560,8 +638,6 @@ function handleSubmit(raw){
     proband_counter: num,
     accepted: false
   });
-
-  updatePatternMessage();
 
   state.current_offer = next;
   state.last_concession = concession;
@@ -585,7 +661,7 @@ function viewDecision(){
     <p class="muted">Teilnehmer-ID: ${state.participant_id}</p>
 
     <div class="card" style="padding:16px;border:1px dashed var(--accent);">
-      <strong>Letztes Angebot:</strong> ${eur(state.current_offer)}
+      <strong>Letztes Angebot:</strong> ${eur(state.current_offer)}</strong>
     </div>
 
     <button id="takeBtn">Annehmen</button>
