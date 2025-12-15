@@ -71,6 +71,10 @@
     body.append('accepted', row.accepted ? '1' : '0');
     body.append('finished', row.finished ? '1' : '0');
 
+    body.append('proband_exit', row.proband_exit ?? '');
+    body.append('algo_exit',    row.algo_exit ?? '');
+
+
     if (row.deal_price != null && row.deal_price !== '') {
       body.append('deal_price', String(row.deal_price));
     }
