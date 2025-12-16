@@ -131,7 +131,7 @@ function logRound(row) {
     accepted: row.accepted,
     finished: row.finished,
 
-    // NEU: Exit-Flags
+    // Exit-Flags
     proband_exit: row.proband_exit ?? '',
     algo_exit: row.algo_exit ?? '',
 
@@ -166,7 +166,7 @@ function shouldAutoAccept(initialOffer, minPrice, prevOffer, counter) {
 }
 
 /* ========================================================================== */
-/* Abbruchwahrscheinlichkeit: Diff 3000 * Multiplikator → 30 %               */
+/* Abbruchwahrscheinlichkeit: Diff 3000 * Multiplikator → 25 %               */
 /* ========================================================================== */
 function abortProbability(userOffer) {
   const seller = state.current_offer;
@@ -175,13 +175,14 @@ function abortProbability(userOffer) {
 
   if (!Number.isFinite(buyer)) return 0;
 
-  // Extrem-Lowball-Basisrisiko (für Anzeige; Abbruch aber erst ab Runde 4)
+  // Extrem-Lowball-Basisrisiko (für Anzeige),
+  // tatsächlicher Abbruch ist durch maybeAbort (Rundengrenze) geregelt
   if (buyer < EXTREME_BASE * f) return 100;
 
   const diff = Math.abs(seller - buyer);
 
-  const BASE_DIFF = 3000 * f;   // bei dieser Differenz sollen 30 % entstehen
-  let chance = (diff / BASE_DIFF) * 30;
+  const BASE_DIFF = 3000 * f;   // bei dieser Differenz sollen 25 % entstehen
+  let chance = (diff / BASE_DIFF) * 25;
 
   if (chance < 0)   chance = 0;
   if (chance > 100) chance = 100;
@@ -191,14 +192,11 @@ function abortProbability(userOffer) {
 
 /* ========================================================================== */
 /* Mustererkennung + Warnhinweis-Steuerung                                   */
-/*  - Warnung bei keinen Veränderungen oder Erhöhungen <= 100 * Multiplikator*/
-/*  - Ab 2 aufeinanderfolgenden kleinen Schritten → Warnung aktiv            */
-/*  - warningRounds zählt Runden mit aktiver Warnung                         */
 /* ========================================================================== */
 function updatePatternMessage(currentBuyerOffer) {
   const f           = state.scale_factor || 1.0;
-  const limit       = 2250 * f;           // relevante Offerschwelle
-  const SMALL_STEP  = 100 * f;           // 100 × Multiplikator
+  const limit       = 2250 * f;          // relevante Offerschwelle
+  const SMALL_STEP  = 100 * f;          // 100 × Multiplikator
 
   const counters = [];
 
@@ -271,8 +269,8 @@ function computeNextOffer(prevOffer, minPrice) {
 
 /* ========================================================================== */
 /* Abbruchentscheidung mit Rundengrenze + Warnbonus                          */
-/*  - kein Abbruch vor Runde 4                                               */
-/*  - Basischance aus Differenz (3000*f → 30 %)                              */
+/*  - kein Abbruch vor Runde 3                                               */
+/*  - Basischance aus Differenz (3000*f → 25 %)                              */
 /*  - +2 %-Punkte pro Warnrunde, solange Warnung aktiv ist                   */
 /* ========================================================================== */
 function maybeAbort(userOffer) {
@@ -288,8 +286,8 @@ function maybeAbort(userOffer) {
 
   state.last_abort_chance = chance;
 
-  // Kein Abbruch vor Runde 4 – nur Anzeige
-  if (state.runde < 4) {
+  // Kein Abbruch vor Runde 3 – nur Anzeige
+  if (state.runde < 3) {
     return false;
   }
 
@@ -445,7 +443,7 @@ function viewAbort(chance) {
 }
 
 /* ========================================================================== */
-/* NEU: Abbruch-Screen (Proband)                                              */
+/* Abbruch-Screen (Proband)                                                  */
 /* ========================================================================== */
 function viewProbandAbort() {
   app.innerHTML = `
@@ -602,7 +600,7 @@ function viewNegotiate(errorMsg) {
     viewThink(() => viewFinish(true));
   };
 
-  // NEU: Proband bricht ab
+  // Proband bricht ab
   document.getElementById('abortBtn').onclick = () => {
     state.history.push({
       runde: state.runde,
@@ -685,7 +683,7 @@ function handleSubmit(raw) {
   // Pattern-/Warnzustand mit dem aktuellen Angebot aktualisieren
   updatePatternMessage(num);
 
-  // Abbruchentscheidung (inkl. Warnbonus; aber erst ab Runde 4 wirksam)
+  // Abbruchentscheidung (inkl. Warnbonus; ab Runde 3 wirksam)
   if (maybeAbort(num)) return;
 
   // Normale Runde: Verhandlungsstil – kein Preisnachlass
