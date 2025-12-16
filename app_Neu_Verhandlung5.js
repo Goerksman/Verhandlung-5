@@ -255,7 +255,7 @@ function updatePatternMessage(currentBuyerOffer) {
       state.warningRounds = 1;
     }
     state.patternMessage =
-      'Mit solchen kleinen Erhöhungen wird das schwierig. Geh bitte ein Stück näher an deine Schmerzgrenze, dann finden wir bestimmt schneller einen fairen Deal.';
+      'Mit derart kleinen Erhöhungen kommen wir eher unwahrscheinlich zu einer Einigung.';
   } else {
     state.patternMessage = '';
     state.warningRounds = 0;
