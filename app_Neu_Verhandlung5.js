@@ -84,7 +84,7 @@ const eur = n =>
 /* Zustand                                                                    */
 /* ========================================================================== */
 function newState() {
-  const factor = nextDimensionFactor();
+  const factor  = nextDimensionFactor();
   const floorRaw = ABSOLUTE_FLOOR * factor;
   const offer    = Math.round(floorRaw);   // keine 50er-Rundung mehr
 
@@ -99,7 +99,7 @@ function newState() {
     initial_offer: offer,
     current_offer: offer,
 
-    step_amount: 0,
+    step_amount: BASE_STEP_AMOUNT * factor,
     last_concession: null,
 
     history: [],
@@ -138,7 +138,7 @@ function logRound(row) {
 }
 
 /* ========================================================================== */
-/* Auto-Accept (Verhandlungsstil unverändert)                                */
+/* Auto-Accept (Verhandlungsstil)                                            */
 /* ========================================================================== */
 function shouldAutoAccept(initialOffer, minPrice, prevOffer, counter) {
   const c = Number(counter);
@@ -166,12 +166,12 @@ function shouldAutoAccept(initialOffer, minPrice, prevOffer, counter) {
 function abortProbability(userOffer) {
   const seller = state.current_offer;
   const buyer  = Number(userOffer);
-  const f = state.scale_factor || 1.0;
+  const f      = state.scale_factor || 1.0;
 
   if (!Number.isFinite(buyer)) return 0;
 
   // Extrem-Lowball-Basisrisiko (für Anzeige; Abbruch aber erst ab Runde 4)
-  if (buyer < 1500 * f) return 100;
+  if (buyer < EXTREME_BASE * f) return 100;
 
   const diff = Math.abs(seller - buyer);
 
@@ -186,15 +186,14 @@ function abortProbability(userOffer) {
 
 /* ========================================================================== */
 /* Mustererkennung + Warnhinweis-Steuerung                                   */
-/*  - Warnung bei keinen Veränderungen oder Erhöhungen < 100 €               */
+/*  - Warnung bei keinen Veränderungen oder Erhöhungen <= 100 * Multiplikator*/
 /*  - Ab 2 aufeinanderfolgenden kleinen Schritten → Warnung aktiv            */
 /*  - warningRounds zählt Runden mit aktiver Warnung                         */
 /* ========================================================================== */
-
 function updatePatternMessage(currentBuyerOffer) {
-  const f     = state.scale_factor || 1.0;
-  const limit = 2250 * f;   // relevante Offerschwelle
-  const SMALL_STEP = 100;   // absolute 100 €
+  const f           = state.scale_factor || 1.0;
+  const limit       = 2250 * f;           // relevante Offerschwelle
+  const SMALL_STEP  = 100 * f;           // 100 × Multiplikator
 
   const counters = [];
 
@@ -233,8 +232,8 @@ function updatePatternMessage(currentBuyerOffer) {
       continue;
     }
 
-    // kleiner Schritt: kein Unterschied oder Erhöhung < 100 €
-    if (diff === 0 || (diff > 0 && diff < SMALL_STEP)) {
+    // kleiner Schritt: kein Unterschied oder Erhöhung ≤ 100 × Multiplikator
+    if (diff === 0 || (diff > 0 && diff <= SMALL_STEP)) {
       chain++;
     } else {
       chain = 1;
@@ -274,7 +273,7 @@ function computeNextOffer(prevOffer, minPrice) {
 function maybeAbort(userOffer) {
   const buyer = Number(userOffer);
 
-  // Basischance aus Differenz
+  // Basischance aus Differenz und Extrem-Lowball
   let chance = abortProbability(userOffer);
 
   // Zusatzanteil durch Warnung: +2 % je Warnrunde
@@ -284,12 +283,11 @@ function maybeAbort(userOffer) {
 
   state.last_abort_chance = chance;
 
-  // Kein Abbruch vor Runde 4 – nur Anzeige, kein Abbruch
+  // Kein Abbruch vor Runde 4 – nur Anzeige
   if (state.runde < 4) {
     return false;
   }
 
-  // Ab Runde 4 darf abgebrochen werden (auch bei 100 % wegen Lowball)
   const roll = randInt(1, 100);
 
   if (roll <= chance) {
@@ -463,7 +461,7 @@ function viewNegotiate(errorMsg) {
 
   state.last_abort_chance = abortChance;
 
-  // Farbskala: <=20% grün, >20–40% orange, >40% rot
+  // Farbskala: ≤20% grün, >20–40% orange, >40% rot
   let color = '#16a34a'; // grün
   if (abortChance > 40) {
     color = '#dc2626'; // rot
@@ -510,7 +508,7 @@ function viewNegotiate(errorMsg) {
   `;
 
   const inputEl = document.getElementById('counter');
-  inputEl.onkeydown = e => { if (e.key === "Enter") handleSubmit(inputEl.value); };
+  inputEl.onkeydown = e => { if (e.key === 'Enter') handleSubmit(inputEl.value); };
   document.getElementById('sendBtn').onclick = () => handleSubmit(inputEl.value);
 
   document.getElementById('acceptBtn').onclick = () => {
