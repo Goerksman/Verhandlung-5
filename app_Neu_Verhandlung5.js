@@ -251,7 +251,7 @@ function updatePatternMessage(currentBuyerOffer) {
       state.warningRounds = 1;
     }
     state.patternMessage =
-      'Mit derart kleinen Erhöhungen kommen wir eher unwahrscheinlich zu einer Einigung.';
+      'Mit solchen kleinen Erhöhungen wird das schwierig. Geh bitte ein Stück näher an deine Schmerzgrenze, dann finden wir bestimmt schneller einen fairen Deal.';
   } else {
     state.patternMessage = '';
     state.warningRounds = 0;
@@ -488,7 +488,7 @@ function viewNegotiate(errorMsg) {
         padding:10px;
         border-radius:8px;
         margin-bottom:10px;">
-        <b style="color:${color};">Abbruchwahrscheinlichkeit (auf Basis deines letzten Angebots):</b>
+        <b style="color:${color};">Abbruchwahrscheinlichkeit:</b>
         <span style="color:${color}; font-weight:600;">
           ${abortChance}%
         </span>
